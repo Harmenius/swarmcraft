@@ -1,13 +1,24 @@
 [project]
 name = "swarmcraft"
 version = "0.1.0"
-description = "Add your description here"
+description = "Interactive swarm intelligence for experiential learning"
 readme = "README.md"
 authors = [
     { name = "raoul grouls", email = "Raoul.Grouls@han.nl" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.12",
+    "numpy>=2.2.6",
+    "pandas>=2.2.3",
+    "plotly>=6.1.2",
+    "pydantic>=2.11.5",
+    "python-dotenv>=1.1.0",
+    "python-multipart>=0.0.20",
+    "redis>=6.2.0",
+    "uvicorn>=0.34.2",
+    "websockets>=15.0.1",
+]
 
 [project.scripts]
 swarmcraft = "swarmcraft:main"
@@ -15,3 +26,58 @@ swarmcraft = "swarmcraft:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "jupyter>=1.1.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.1.1",
+    "pytest-mock>=3.14.1",
+    "ruff>=0.11.11",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",  # Show summary of all results
+	"-v",  # Verbose output
+    "--strict-markers",  # Strict marker usage
+    "--strict-config",   # Strict config
+    "--disable-warnings",  # Disable warnings for cleaner output
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "visualization: marks tests that create plots",
+    "redis: marks tests that require Redis",
+]
+filterwarnings = [
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+]
+minversion = "7.0"
+
+[tool.coverage.run]
+source = ["src/swarmcraft"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+]
