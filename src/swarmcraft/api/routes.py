@@ -204,9 +204,11 @@ async def make_move(
     # 5. Update the state of the specific particle within the swarm_state object.
     particle_to_update = pso.get_particle_by_id(pso_particle_id)
     new_fitness = landscape.evaluate(np.array(suggested_cont_pos))
+    velocity_mag = 0.0
     if particle_to_update:
         particle_to_update.update_position(np.array(suggested_cont_pos))
         particle_to_update.fitness = new_fitness
+        velocity_mag = float(np.linalg.norm(particle_to_update.velocity))
 
     # 6. Convert the new continuous position back to a discrete grid position.
     bounds = landscape.metadata.recommended_bounds
@@ -238,6 +240,7 @@ async def make_move(
     return {
         "position": new_grid_pos,
         "fitness": new_fitness,
+        "velocity_magnitude": velocity_mag,
         "color": landscape.get_fitness_color(new_fitness),
         "frequency": landscape.get_fitness_audio_frequency(new_fitness),
         "description": landscape.describe_position(np.array(suggested_cont_pos)),

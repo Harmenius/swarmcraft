@@ -8,6 +8,7 @@ maintaining mathematical rigor.
 """
 
 import numpy as np
+import colorsys
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any, Optional
 from pydantic import BaseModel, Field
@@ -74,32 +75,38 @@ class OptimizationLandscape(ABC):
         """Get landscape metadata."""
         return self._metadata
 
-    def get_fitness_color(self, fitness: float) -> str:
+    def get_fitness_color(
+        self, fitness: float, velocity_magnitude: Optional[float] = None
+    ) -> str:
         """
-        Convert fitness value to color for human feedback.
-
-        Returns hex color string for mobile display.
+        Convert fitness value to color. Higher velocity increases saturation.
         """
-        # Normalize fitness to [0, 1] range for coloring
-        # This is a default implementation - subclasses can override
         min_expected = self._metadata.global_minimum_value
-        max_expected = min_expected + 50  # Rough estimate
+        max_expected = min_expected + 50
 
-        normalized = max(
+        normalized_fitness = max(
             0, min(1, (fitness - min_expected) / (max_expected - min_expected))
         )
 
-        # Green (good) to Red (bad) gradient
-        if normalized < 0.5:
-            # Green to Yellow
-            r = int(255 * normalized * 2)
+        if normalized_fitness < 0.5:
+            r = int(255 * normalized_fitness * 2)
             g = 255
             b = 0
         else:
-            # Yellow to Red
             r = 255
-            g = int(255 * (1 - (normalized - 0.5) * 2))
+            g = int(255 * (1 - (normalized_fitness - 0.5) * 2))
             b = 0
+
+        if velocity_magnitude is not None:
+            max_expected_velocity = 5.0
+            norm_velocity = min(1.0, velocity_magnitude / max_expected_velocity)
+
+            hue, lightness, _ = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+
+            new_saturation = 0.4 + (norm_velocity * 0.6)
+
+            r_new, g_new, b_new = colorsys.hls_to_rgb(hue, lightness, new_saturation)
+            r, g, b = int(r_new * 255), int(g_new * 255), int(b_new * 255)
 
         return f"#{r:02x}{g:02x}{b:02x}"
 
@@ -304,19 +311,42 @@ class EcologicalLandscape(OptimizationLandscape):
         else:
             return f"Challenging situation - major policy changes needed. (Cost: {fitness:.1f})"
 
-    def get_fitness_color(self, fitness: float) -> str:
-        """Custom coloring for ecological theme."""
-        # Green for sustainable, brown/red for unsustainable
+    def get_fitness_color(
+        self, fitness: float, velocity_magnitude: Optional[float] = None
+    ) -> str:
+        """Custom coloring for ecological theme, with velocity affecting saturation."""
+        # First, determine the base hex color based on fitness
         if fitness < 8:
-            return "#00AA00"  # Bright green - sustainable
+            hex_color = "#00AA00"  # Bright green
         elif fitness < 15:
-            return "#88AA00"  # Yellow-green - decent
+            hex_color = "#88AA00"  # Yellow-green
         elif fitness < 25:
-            return "#AAAA00"  # Yellow - concerning
+            hex_color = "#AAAA00"  # Yellow
         elif fitness < 35:
-            return "#AA5500"  # Orange - problematic
+            hex_color = "#AA5500"  # Orange
         else:
-            return "#AA0000"  # Red - crisis
+            hex_color = "#AA0000"  # Red
+
+        # If velocity is provided, adjust the saturation of the chosen color
+        if velocity_magnitude is not None:
+            max_expected_velocity = 5.0
+            norm_velocity = min(1.0, velocity_magnitude / max_expected_velocity)
+
+            # Convert hex to RGB floats (0-1)
+            hex_color = hex_color.lstrip("#")
+            r, g, b = tuple(int(hex_color[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+            # Convert RGB to HLS
+            hue, lightness, _ = colorsys.rgb_to_hls(r, g, b)
+            new_saturation = 0.4 + (norm_velocity * 0.6)
+
+            # Convert back to RGB and then to a new hex string
+            r_new, g_new, b_new = colorsys.hls_to_rgb(hue, lightness, new_saturation)
+            return (
+                f"#{int(r_new * 255):02x}{int(g_new * 255):02x}{int(b_new * 255):02x}"
+            )
+
+        return hex_color
 
 
 # Factory function for easy landscape creation

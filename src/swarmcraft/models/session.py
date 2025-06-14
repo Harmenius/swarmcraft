@@ -16,6 +16,7 @@ class Participant(BaseModel):
     name: str
     position: Optional[List[int]] = None  # Grid coordinates [i, j]
     fitness: Optional[float] = None
+    velocity_magnitude: Optional[float] = None
     connected: bool = True
     joined_at: datetime
 

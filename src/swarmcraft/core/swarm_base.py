@@ -367,5 +367,8 @@ class SwarmOptimizer(ABC):
 
             participant.position = grid_pos
             participant.fitness = particle.fitness
+            participant.velocity_magnitude = float(
+                np.linalg.norm(particle.velocity_array)
+            )
 
         return participants
