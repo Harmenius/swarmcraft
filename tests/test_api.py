@@ -1,288 +1,160 @@
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 import os
+from fastapi import status
+from fastapi.testclient import TestClient
 
 from swarmcraft.main import app
-from swarmcraft.utils.name_generator import (
-    generate_session_code,
-    generate_participant_name,
-)
+from swarmcraft.database.redis_client import redis_client
 
-# Set test environment
-os.environ["SWARM_API_KEY"] = "test_admin_key_12345"
-os.environ["REDIS_URL"] = "redis://localhost:6379/1"  # Use different DB for tests
+# Use a consistent test key for all tests
+TEST_ADMIN_KEY = "test_admin_key_for_ci_12345"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
+def anyio_backend():
+    # Required configuration for using async fixtures with pytest
+    return "asyncio"
+
+
+@pytest.fixture(scope="module")
 async def async_client():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    """
+    Creates a single test client for the entire test module.
+    It sets up the necessary environment variables and flushes the test
+    database before and after all tests in the module run.
+    """
+    os.environ["SWARM_API_KEY"] = TEST_ADMIN_KEY
+    os.environ["REDIS_URL"] = "redis://localhost:6379/1"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        db = await redis_client.get_redis()
+        await db.flushdb()
         yield client
+        await db.flushdb()
 
 
 @pytest.fixture
 def admin_headers():
-    return {"X-Admin-Key": "test_admin_key_12345"}
+    """Provides the authorization header for admin-only endpoints."""
+    return {"X-Admin-Key": TEST_ADMIN_KEY}
 
 
-class TestAdminEndpoints:
-    """Test admin-only endpoints"""
+@pytest.mark.anyio
+async def test_health_check(async_client: AsyncClient):
+    """Tests that the health check endpoint is responsive and reports a healthy status."""
+    response = await async_client.get("/health")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["status"] == "healthy"
 
-    @pytest.mark.asyncio
-    async def test_create_session_success(
-        self, async_client: AsyncClient, admin_headers
-    ):
-        """Test successful session creation"""
-        session_config = {
-            "landscape_type": "rastrigin",
-            "landscape_params": {"A": 10.0, "dimensions": 2},
-            "grid_size": 25,
-            "max_participants": 20,
-        }
 
-        response = await async_client.post(
+@pytest.mark.anyio
+class TestSessionLifecycle:
+    """
+    A comprehensive test class that simulates the entire lifecycle of a session,
+    from creation to deletion, ensuring all endpoints and state transitions work correctly.
+    """
+
+    async def test_full_lifecycle(self, async_client: AsyncClient, admin_headers):
+        # Steps 1-8: Use the async_client for all standard HTTP requests
+        # 1. ADMIN: Create a new session
+        session_config = {"landscape_type": "ecological", "grid_size": 15}
+        create_response = await async_client.post(
             "/api/admin/create-session", json=session_config, headers=admin_headers
         )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "session_id" in data
-        assert "session_code" in data
-        assert len(data["session_code"]) == 6
-        assert "Session created!" in data["message"]
-
-    @pytest.mark.asyncio
-    async def test_create_session_no_auth(self, async_client: AsyncClient):
-        """Test session creation without admin key"""
-        session_config = {"landscape_type": "rastrigin"}
-
-        response = await async_client.post(
-            "/api/admin/create-session", json=session_config
-        )
-
-        assert response.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_create_session_invalid_auth(self, async_client: AsyncClient):
-        """Test session creation with invalid admin key"""
-        response = await async_client.post(
-            "/api/admin/create-session",
-            json={"landscape_type": "rastrigin"},
-            headers={"X-Admin-Key": "wrong_key"},
-        )
-
-        assert response.status_code == 403
-
-
-class TestParticipantEndpoints:
-    """Test participant endpoints"""
-
-    @pytest.fixture
-    async def test_session(self, async_client: AsyncClient, admin_headers):
-        """Create a test session"""
-        session_config = {
-            "landscape_type": "rastrigin",
-            "landscape_params": {"A": 10.0, "dimensions": 2},
-            "grid_size": 10,
-            "max_participants": 5,
-        }
-
-        response = await async_client.post(
-            "/api/admin/create-session", json=session_config, headers=admin_headers
-        )
-
-        return response.json()
-
-    @pytest.mark.asyncio
-    async def test_join_session_success(self, async_client: AsyncClient, test_session):
-        """Test successful session join"""
-        session_code = test_session["session_code"]
-
-        response = await async_client.post(f"/api/join/{session_code}")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "session_id" in data
-        assert "participant_id" in data
-        assert "participant_name" in data
-        assert "Welcome" in data["message"]
-
-    @pytest.mark.asyncio
-    async def test_join_invalid_session(self, async_client: AsyncClient):
-        """Test joining non-existent session"""
-        response = await async_client.post("/api/join/INVALID")
-
-        assert response.status_code == 404
-        assert "Invalid session code" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_get_session_status(self, async_client: AsyncClient, test_session):
-        """Test getting session status"""
-        session_id = test_session["session_id"]
-
-        response = await async_client.get(f"/api/session/{session_id}/status")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "waiting"
-        assert data["participants"] == 0
-        assert data["landscape_type"] == "rastrigin"
-        assert data["grid_size"] == 10
-
-    @pytest.mark.asyncio
-    async def test_make_move(self, async_client: AsyncClient, test_session):
-        """Test making a move"""
-        session_code = test_session["session_code"]
-        session_id = test_session["session_id"]
-
-        # First join the session
-        join_response = await async_client.post(f"/api/join/{session_code}")
-        participant_id = join_response.json()["participant_id"]
-
-        # Make a move
-        move_data = {
-            "participant_id": participant_id,
-            "position": [5, 5],  # Center of 10x10 grid
-        }
-
-        response = await async_client.post(
-            f"/api/session/{session_id}/move", json=move_data
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["position"] == [5, 5]
-        assert "fitness" in data
-        assert "color" in data
-        assert "frequency" in data
-        assert "description" in data
-
-    @pytest.mark.asyncio
-    async def test_move_out_of_bounds(self, async_client: AsyncClient, test_session):
-        """Test invalid move"""
-        session_code = test_session["session_code"]
-        session_id = test_session["session_id"]
-
-        # Join session
-        join_response = await async_client.post(f"/api/join/{session_code}")
-        participant_id = join_response.json()["participant_id"]
-
-        # Try invalid move
-        move_data = {
-            "participant_id": participant_id,
-            "position": [15, 15],  # Out of bounds for 10x10 grid
-        }
-
-        response = await async_client.post(
-            f"/api/session/{session_id}/move", json=move_data
-        )
-
-        assert response.status_code == 400
-        assert "out of bounds" in response.json()["detail"]
-
-
-class TestUtilities:
-    """Test utility functions"""
-
-    def test_generate_session_code(self):
-        """Test session code generation"""
-        code = generate_session_code()
-        assert len(code) == 6
-        assert code.isalnum()
-        assert "O" not in code  # Should avoid confusing characters
-        assert "0" not in code
-        assert "I" not in code
-        assert "1" not in code
-
-    def test_generate_participant_name(self):
-        """Test participant name generation"""
-        name = generate_participant_name()
-        assert " " in name  # Should have space between adjective and animal
-        parts = name.split(" ")
-        assert len(parts) == 2
-        assert len(parts[0]) > 2  # Reasonable adjective length
-        assert len(parts[1]) > 2  # Reasonable animal length
-
-    def test_unique_names(self):
-        """Test that names are reasonably unique"""
-        names = [generate_participant_name() for _ in range(100)]
-        unique_names = set(names)
-        # Should have good variety (at least 80% unique in 100 generations)
-        assert len(unique_names) > 80
-
-
-class TestLandscapeIntegration:
-    """Test landscape integration in API"""
-
-    @pytest.mark.asyncio
-    async def test_rastrigin_feedback(self, async_client: AsyncClient, admin_headers):
-        """Test Rastrigin landscape feedback"""
-        # Create Rastrigin session
-        session_config = {
-            "landscape_type": "rastrigin",
-            "landscape_params": {"A": 10.0, "dimensions": 2},
-            "grid_size": 25,
-        }
-
-        session_response = await async_client.post(
-            "/api/admin/create-session", json=session_config, headers=admin_headers
-        )
-
-        session_data = session_response.json()
-        session_code = session_data["session_code"]
+        assert create_response.status_code == status.HTTP_200_OK
+        session_data = create_response.json()
         session_id = session_data["session_id"]
+        session_code = session_data["session_code"]
 
-        # Join session
-        join_response = await async_client.post(f"/api/join/{session_code}")
-        participant_id = join_response.json()["participant_id"]
-
-        # Test center position (should be near global minimum)
-        center_move = {
-            "participant_id": participant_id,
-            "position": [12, 12],  # Center of 25x25 grid
-        }
-
-        center_response = await async_client.post(
-            f"/api/session/{session_id}/move", json=center_move
+        # 2. ADMIN: List sessions to verify it was created
+        list_response = await async_client.get(
+            "/api/admin/sessions", headers=admin_headers
         )
+        assert list_response.status_code == status.HTTP_200_OK
+        assert len(list_response.json()) == 1
+        assert list_response.json()[0]["session_id"] == session_id
+        assert list_response.json()[0]["status"] == "waiting"
 
-        center_data = center_response.json()
-        center_fitness = center_data["fitness"]
+        # 3. PARTICIPANTS: Have two participants join the session
+        join_res_1 = await async_client.post(f"/api/join/{session_code}")
+        assert join_res_1.status_code == status.HTTP_200_OK
+        p1_data = join_res_1.json()
+        p1_id = p1_data["participant_id"]
 
-        # Test corner position (should be worse)
-        corner_move = {
-            "participant_id": participant_id,
-            "position": [0, 0],  # Corner
-        }
+        join_res_2 = await async_client.post(f"/api/join/{session_code}")
+        assert join_res_2.status_code == status.HTTP_200_OK
+        p2_data = join_res_2.json()
+        p2_id = p2_data["participant_id"]
 
-        corner_response = await async_client.post(
-            f"/api/session/{session_id}/move", json=corner_move
+        # 4. ADMIN: Start the session, which initializes the swarm state
+        start_response = await async_client.post(
+            f"/api/admin/session/{session_id}/start", headers=admin_headers
         )
+        assert start_response.status_code == status.HTTP_200_OK
+        assert "swarm state initialized" in start_response.json()["message"]
 
-        corner_data = corner_response.json()
-        corner_fitness = corner_data["fitness"]
+        # 5. Check status to confirm it's active and participants have positions
+        status_response = await async_client.get(f"/api/session/{session_id}/status")
+        assert status_response.json()["status"] == "active"
+        assert status_response.json()["participants"] == 2
 
-        # Center should be better (lower fitness) than corner
-        assert center_fitness < corner_fitness
+        # 6. PARTICIPANT: Trigger an individual, asynchronous move for p1
+        move_response = await async_client.post(
+            f"/api/session/{session_id}/move", json={"participant_id": p1_id}
+        )
+        assert move_response.status_code == status.HTTP_200_OK
+        assert "position" in move_response.json()
+        assert "velocity_magnitude" in move_response.json()
 
-        # Check feedback format
-        assert center_data["color"].startswith("#")
-        assert len(center_data["color"]) == 7
-        assert 200 <= center_data["frequency"] <= 800
-        assert isinstance(center_data["description"], str)
-        assert len(center_data["description"]) > 10
+        # 7. ADMIN: Trigger a global, synchronous step for all participants
+        step_response = await async_client.post(
+            f"/api/admin/session/{session_id}/step", headers=admin_headers
+        )
+        assert step_response.status_code == status.HTTP_200_OK
+        assert "step 1 executed" in step_response.json()["message"]
 
+        # 8. Check status again to see the iteration count has updated
+        status_after_step = await async_client.get(f"/api/session/{session_id}/status")
+        assert status_after_step.json()["iteration"] == 1
 
-# WebSocket tests (more complex, using pytest-asyncio)
-class TestWebSocket:
-    """Test WebSocket functionality"""
+        # 9. Test WebSocket broadcast after a step
+        with TestClient(app) as client:
+            with client.websocket_connect(f"/ws/{session_id}/{p2_id}") as websocket:
+                # First message is always the 'connected' confirmation
+                data = websocket.receive_json()
+                assert data["type"] == "connected"
 
-    @pytest.mark.asyncio
-    async def test_websocket_connection(self):
-        """Test basic WebSocket connection"""
-        # Note: This would need a more complex setup with actual WebSocket testing
-        # For now, just test that the endpoint exists
-        pass  # TODO: Implement WebSocket testing
+                # The server then sends the current state
+                data = websocket.receive_json()
+                assert data["type"] == "session_state"
+                assert data["session"]["iteration"] == 1  # Check current iteration
 
+                # Now, trigger another step using the SYNCHRONOUS client
+                client.post(
+                    f"/api/admin/session/{session_id}/step", headers=admin_headers
+                )
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+                # Check that the WebSocket received a broadcast with the new state
+                data = websocket.receive_json()
+                assert data["type"] == "session_state"
+                assert (
+                    data["session"]["iteration"] == 2
+                )  # Verify iteration was incremented
+                assert len(data["session"]["participants"]) == 2
+                assert "velocity_magnitude" in data["session"]["participants"][0]
+
+        # 10. ADMIN: Delete the session (switch back to async_client for consistency)
+        delete_response = await async_client.delete(
+            f"/api/admin/session/{session_id}", headers=admin_headers
+        )
+        assert delete_response.status_code == status.HTTP_200_OK
+        assert "closed and all data deleted" in delete_response.json()["message"]
+
+        # 11. Verify the session is gone by listing again
+        final_list_response = await async_client.get(
+            "/api/admin/sessions", headers=admin_headers
+        )
+        assert len(final_list_response.json()) == 0

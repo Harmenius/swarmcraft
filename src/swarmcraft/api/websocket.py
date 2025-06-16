@@ -122,7 +122,7 @@ class ConnectionManager:
             await self.disconnect(session_id, participant_id)
 
     async def send_session_state(self, session_id: str, participant_id: str = None):
-        """Send current session state to participant(s)"""
+        """Send current session state to participant(s)."""
         redis_conn = await get_redis()
         session_data = await get_json(f"session:{session_id}", redis_conn)
 
@@ -130,47 +130,36 @@ class ConnectionManager:
             return
 
         session = GameSession(**session_data)
+
         landscape = create_landscape(
             session.config.landscape_type, **session.config.landscape_params
         )
 
-        # Build the list of participants, now including velocity and color
+        # --- START of Corrected Logic ---
         participants_list = []
         for p in session.participants:
-            participants_list.append(
-                {
-                    "id": p.id,
-                    "name": p.name,
-                    "position": p.position,
-                    "fitness": p.fitness,
-                    "velocity_magnitude": p.velocity_magnitude,
-                    "color": landscape.get_fitness_color(
-                        p.fitness, p.velocity_magnitude
-                    )
-                    if p.fitness is not None
-                    else "#888888",
-                    "connected": p.id in self.active_connections.get(session_id, {}),
-                }
+            # Use Pydantic's model_dump to create a reliable dictionary
+            p_dict = p.model_dump(mode="json")
+
+            # Now, add the extra fields that are calculated on the fly
+            p_dict["color"] = (
+                landscape.get_fitness_color(p.fitness, p.velocity_magnitude)
+                if p.fitness is not None
+                else "#888888"
             )
+            p_dict["connected"] = p.id in self.active_connections.get(session_id, {})
+
+            participants_list.append(p_dict)
+        # --- END of Corrected Logic ---
 
         state_message = {
             "type": "session_state",
             "session": {
                 "id": session.id,
-                "code:": session.code,
+                "code": session.code,
                 "status": session.status.value,
-                "participants": [
-                    {
-                        "id": p.id,
-                        "name": p.name,
-                        "position": p.position,
-                        "fitness": p.fitness,
-                        "connected": p.id
-                        in self.active_connections.get(session_id, {}),
-                    }
-                    for p in session.participants
-                ],
-                "config": session.config.model_dump(mode="json"),
+                "participants": participants_list,  # Use the reliably created list
+                "config": session.config.model_dump(),
                 "iteration": session.swarm_iteration,
             },
             "timestamp": datetime.now().isoformat(),

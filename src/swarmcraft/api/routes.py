@@ -221,6 +221,7 @@ async def make_move(
     # 7. Update the participant's info in the GameSession object.
     session.participants[participant_index].position = new_grid_pos
     session.participants[participant_index].fitness = new_fitness
+    session.participants[participant_index].velocity_magnitude = velocity_mag
 
     # 8. SAVE both updated states back to Redis.
     await set_json(
