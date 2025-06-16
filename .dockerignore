@@ -1,0 +1,23 @@
+# Docker-specific
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Git
+.git
+.gitignore
+
+# Python virtual environment
+.venv
+__pycache__/
+*.py[oc]
+*.egg-info
+
+# Local secrets and config
+.env
+
+# IDE and OS files
+.idea/
+.vscode/
+*.DS_Store
+

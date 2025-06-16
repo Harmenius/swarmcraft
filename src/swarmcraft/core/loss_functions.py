@@ -396,6 +396,7 @@ def create_landscape(landscape_name: str, **kwargs) -> OptimizationLandscape:
     landscapes = {
         "rastrigin": RastriginLandscape,
         "ecological": EcologicalLandscape,
+        "quadratic": QuadraticLandscape,
     }
 
     if landscape_name not in landscapes:
