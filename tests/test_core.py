@@ -19,6 +19,7 @@ from swarmcraft.core.pso import PSO
 from swarmcraft.core.loss_functions import (
     RastriginLandscape,
     EcologicalLandscape,
+    QuadraticLandscape,  # Import the new landscape
     LandscapeType,
     create_landscape,
 )
@@ -49,6 +50,20 @@ class TestOptimizationLandscapes:
         # Should be positive elsewhere
         result = landscape.evaluate(np.array([1.0, 1.0]))
         assert result > 0
+
+    # --- NEW TEST ---
+    def test_quadratic_landscape_creation_and_evaluation(self):
+        """Test Quadratic landscape creation and evaluation."""
+        landscape = QuadraticLandscape(dimensions=3)
+        assert landscape.metadata.name == "Quadratic Bowl"
+        assert landscape.metadata.dimensions == 3
+        assert landscape.metadata.difficulty_level == 1
+
+        # Test evaluation at global minimum (origin)
+        assert landscape.evaluate([0.0, 0.0, 0.0]) == 0.0
+
+        # Test evaluation at another point
+        assert landscape.evaluate([1.0, 2.0, 3.0]) == 1**2 + 2**2 + 3**2
 
     def test_rastrigin_different_dimensions(self):
         """Test Rastrigin with different dimensions."""
@@ -96,6 +111,10 @@ class TestOptimizationLandscapes:
         assert isinstance(rastrigin, RastriginLandscape)
         assert rastrigin.A == 5.0
         assert rastrigin.dimensions == 3
+
+        # Test Quadratic creation
+        quadratic = create_landscape("quadratic", dimensions=2)
+        assert isinstance(quadratic, QuadraticLandscape)
 
         # Test ecological creation
         ecological = create_landscape("ecological")
@@ -244,6 +263,42 @@ class TestPSO:
         assert pso.swarm_state.iteration == 0
         assert pso.swarm_state.phase == "initialization"
 
+    def test_pso_exploration_annealing(self):
+        """Test that the exploration probability correctly anneals over time."""
+        pso = PSO(
+            dimensions=2,
+            bounds=[(-5, 5), (-5, 5)],
+            loss_function=lambda x: np.sum(x**2),
+            population_size=5,
+            max_iterations=20,
+            exploration_probability=0.5,
+            min_exploration_probability=0.1,  # Anneal from 0.5 down to 0.1
+            random_seed=42,
+        )
+
+        # Before any steps, it should be at the initial value
+        assert pso.current_exploration_probability == 0.5
+
+        # After 1 step (iteration 1)
+        pso.step()
+        expected_prob_1 = 0.5 - (0.4 * (1 / 20))
+        assert abs(pso.current_exploration_probability - expected_prob_1) < 1e-9
+
+        # After 10 steps (halfway)
+        for _ in range(9):
+            pso.step()
+        # expected_prob_10 = 0.5 - (0.4 * (10/20))  # Should be 0.3 # Ruff F841 Fix
+        assert abs(pso.current_exploration_probability - 0.3) < 1e-9
+
+        # After 20 steps (end)
+        for _ in range(10):
+            pso.step()
+        assert abs(pso.current_exploration_probability - 0.1) < 1e-9
+
+        # After more than max_iterations, it should clamp to the minimum
+        pso.step()
+        assert abs(pso.current_exploration_probability - 0.1) < 1e-9
+
     def test_pso_step_execution(self):
         """Test PSO step execution."""
 
@@ -259,7 +314,7 @@ class TestPSO:
         )
 
         initial_iteration = pso.swarm_state.iteration
-        initial_fitness = pso.swarm_state.global_best_fitness
+        # initial_fitness = pso.swarm_state.global_best_fitness # Ruff F841 Fix
 
         # Execute step
         new_state = pso.step()
@@ -326,11 +381,12 @@ class TestPSO:
             population_size=10,
             random_seed=42,
         )
-
+        pso.step()  # Run one step to populate stats
         stats = pso.get_pso_statistics()
 
         # Check required fields
         assert "current_inertia" in stats
+        assert "current_exploration_probability" in stats
         assert "velocity_stats" in stats
         assert "exploration_stats" in stats
         assert "global_best_fitness" in stats
@@ -537,7 +593,9 @@ class TestLandscapeVisualizer:
         with tempfile.TemporaryDirectory() as temp_dir:
             save_path = os.path.join(temp_dir, "test_plot.html")
 
-            fig = visualizer.plot_2d_landscape(
+            # The function is called for its side-effect of saving the file
+            # so the returned figure object does not need to be used.
+            visualizer.plot_2d_landscape(  # Ruff F841 Fix
                 landscape, save_path=save_path, resolution=20
             )
 
@@ -565,7 +623,7 @@ class TestIntegration:
 
         # Record initial state
         initial_fitness = pso.swarm_state.global_best_fitness
-        initial_positions = [p.position for p in pso.swarm_state.particles]
+        # initial_positions = [p.position for p in pso.swarm_state.particles] # Ruff F841 Fix
 
         # Run optimization
         for i in range(20):
@@ -683,6 +741,7 @@ def test_landscapes():
     return {
         "rastrigin": RastriginLandscape(A=10.0, dimensions=2),
         "ecological": EcologicalLandscape(),
+        "quadratic": QuadraticLandscape(dimensions=2),
     }
 
 

@@ -9,7 +9,6 @@ from swarmcraft.database.redis_client import redis_client
 
 # Use a consistent test key for all tests
 TEST_ADMIN_KEY = "test_admin_key_for_ci_12345"
-pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="session")
@@ -60,8 +59,13 @@ class TestSessionLifecycle:
 
     async def test_full_lifecycle(self, async_client: AsyncClient, admin_headers):
         # Steps 1-8: Use the async_client for all standard HTTP requests
-        # 1. ADMIN: Create a new session
-        session_config = {"landscape_type": "ecological", "grid_size": 15}
+        # 1. ADMIN: Create a new session with annealing parameters
+        session_config = {
+            "landscape_type": "quadratic",
+            "grid_size": 15,
+            "max_iterations": 20,  # Add new parameter
+            "min_exploration_probability": 0.01,  # Add new parameter
+        }
         create_response = await async_client.post(
             "/api/admin/create-session", json=session_config, headers=admin_headers
         )
@@ -140,12 +144,12 @@ class TestSessionLifecycle:
 
                 # Check that the WebSocket received a broadcast with the new state
                 data = websocket.receive_json()
-                assert data["type"] == "session_state"
                 assert (
-                    data["session"]["iteration"] == 2
-                )  # Verify iteration was incremented
-                assert len(data["session"]["participants"]) == 2
-                assert "velocity_magnitude" in data["session"]["participants"][0]
+                    data["type"] == "swarm_update"
+                )  # Check for the correct message type
+                assert data["iteration"] == 2
+                assert "statistics" in data
+                assert "exploration_probability" in data["statistics"]
 
         # 10. ADMIN: Delete the session (switch back to async_client for consistency)
         delete_response = await async_client.delete(
