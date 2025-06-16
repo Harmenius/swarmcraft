@@ -285,7 +285,6 @@ async def trigger_swarm_step(
     )
     pso.swarm_state = swarm_state
 
-    # This call now correctly increments the iteration *before* calculating params
     pso.step()
 
     updated_participants = pso.sync_participants_from_swarm(
@@ -309,10 +308,22 @@ async def trigger_swarm_step(
         expire=86400,
     )
 
+    # --- THIS IS THE FIX ---
+    # Manually build the participant list, adding the calculated color
+    participants_with_color = []
+    for p in updated_participants:
+        p_dict = p.model_dump(mode="json")
+        p_dict["color"] = (
+            landscape.get_fitness_color(p.fitness, p.velocity_magnitude)
+            if p.fitness is not None
+            else "#888888"
+        )
+        participants_with_color.append(p_dict)
+
     swarm_update_message = {
         "type": "swarm_update",
         "iteration": session.swarm_iteration,
-        "participants": [p.model_dump(mode="json") for p in updated_participants],
+        "participants": participants_with_color,  # Use the list with colors
         "statistics": {
             "global_best_fitness": stats["global_best_fitness"],
             "explorers": stats["exploration_stats"]["explorers"],
@@ -321,6 +332,7 @@ async def trigger_swarm_step(
         "timestamp": datetime.now().isoformat(),
     }
     await websocket_manager.broadcast_to_session(swarm_update_message, session_id)
+    # -----------------------
 
     return {"message": f"Swarm step {session.swarm_iteration} executed successfully."}
 

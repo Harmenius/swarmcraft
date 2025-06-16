@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import logging
+from loguru import logger
+import sys
 
 from swarmcraft.api.routes import router
 from swarmcraft.api.websocket import websocket_manager, handle_websocket_message
@@ -10,9 +11,14 @@ from swarmcraft.database.redis_client import redis_client, get_redis
 
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure Loguru for clear, colored, and timestamped logging
+logger.remove()
+logger.add(
+    sys.stderr,
+    # format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    level="INFO",
+    colorize=True,
+)
 
 
 @asynccontextmanager
@@ -43,14 +49,11 @@ app = FastAPI(
 )
 
 # CORS for frontend
+# NOTE: Using "*" is permissive for development. For production, you would
+# restrict this to your actual frontend's domain.
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=[
-    #     "http://localhost:3000",
-    #     "http://localhost:5173",
-    #     "http://localhost:8001",
-    # ],
-    allow_origins=["*"],  # For development, restrict in production
+    allow_origins=["*"],  # Allow all origins for easy local testing
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

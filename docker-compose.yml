@@ -15,6 +15,7 @@ services:
       - .env
     environment:
       - UV_LINK_MODE=copy
+      - TZ=Europe/Amsterdam
     depends_on:
       - redis
     volumes:

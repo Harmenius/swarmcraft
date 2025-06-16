@@ -2,15 +2,13 @@ from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List
 import json
 from datetime import datetime
-import logging
+from loguru import logger
 import numpy as np
 
 from swarmcraft.database.redis_client import get_redis, get_json, set_json
 from swarmcraft.models.session import GameSession, SessionStatus
 from swarmcraft.core.loss_functions import create_landscape
 from swarmcraft.core.pso import PSO
-
-logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
