@@ -80,7 +80,11 @@
       <h2>Controls</h2>
       <div>
         <label for="admin-key">Admin Key (SWARM_API_KEY)</label>
-        <input type="text" id="admin-key" placeholder="Paste your key here" />
+        <input
+          type="text"
+          id="admin-key"
+          placeholder="Paste your key from .env file"
+        />
       </div>
       <div>
         <label for="num-participants">Number of Participants</label>
@@ -127,7 +131,7 @@
         ? `${message}: ${JSON.stringify(data, null, 2)}`
         : message;
       console.log(fullMessage);
-      logOutput.innerHTML += `${new Date().toLocaleTimeString()}: ${message}\n`;
+      logOutput.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
       logOutput.scrollTop = logOutput.scrollHeight;
     };
 
@@ -158,30 +162,40 @@
                 `;
         cardsContainer.appendChild(card);
         if (p.position) {
-          const marker = document.createElement("div");
-          marker.className = "particle-marker";
-          marker.id = `marker-${p.id}`;
+          // Find existing marker or create new one
+          let marker = document.getElementById(`marker-${p.id}`);
+          if (!marker) {
+            marker = document.createElement("div");
+            marker.className = "particle-marker";
+            marker.id = `marker-${p.id}`;
+            gridContainer.appendChild(marker);
+          }
           marker.style.backgroundColor = p.color || "#888";
           const [row, col] = p.position;
           marker.style.gridRowStart = row + 1;
           marker.style.gridColumnStart = col + 1;
-          gridContainer.appendChild(marker);
         }
       }
     };
 
     const handleWebSocketMessage = (event) => {
       const data = JSON.parse(event.data);
-      logMessage(`WebSocket received: ${data.type}`, data);
+      logMessage(`WebSocket received: ${data.type}`);
       if (data.type === "session_state") {
         Object.assign(sessionData, data.session);
-        // sessionData = data.session;
         for (const p of data.session.participants) {
           if (participants[p.id]) {
             Object.assign(participants[p.id], p);
           }
         }
         render();
+      } else if (data.type === "participant_moved") {
+        const p = participants[data.participant_id];
+        if (p) {
+          p.position = data.position;
+          p.fitness = data.fitness;
+          render();
+        }
       }
     };
 
@@ -189,13 +203,15 @@
       logMessage("Setting up session...");
       const adminKey = adminKeyInput.value;
       if (!adminKey) {
-        logMessage("ERROR: Admin key is required.");
-        return;
+        logMessage(
+          "ERROR: Admin key is required. Please paste it from your .env file.",
+        );
+        return; // Stop execution if key is missing
       }
       setupBtn.disabled = true;
 
       try {
-        logMessage("1. Creating session...");
+        logMessage("1. Creating session with exploration cooldown...");
         const createRes = await fetch(
           `${API_BASE_URL}/api/admin/create-session`,
           {
@@ -205,29 +221,32 @@
               "X-Admin-Key": adminKey,
             },
             body: JSON.stringify({
-              landscape_type: "quadratic", // Use our new test landscape
+              landscape_type: "quadratic",
               grid_size: 20,
               max_participants: 50,
+              exploration_probability: 0.25, // Start with higher exploration
+              min_exploration_probability: 0.01, // Cool down to almost zero
             }),
           },
         );
-        if (!createRes.ok)
+
+        if (!createRes.ok) {
+          const errorText = await createRes.text();
           throw new Error(
-            `Failed to create session: ${await createRes.text()}`,
+            `Failed to create session: ${createRes.status} ${errorText}`,
           );
+        }
 
         const createData = await createRes.json();
-        logMessage("--> Received from create-session", createData);
-
         sessionData.id = createData.session_id;
         sessionData.code = createData.session_code;
 
-        if (!sessionData.code) {
-          throw new Error("Session code was not received from server!");
-        }
+        logMessage("--> Session created!", createData);
+        logMessage("------------------------------------------");
         logMessage(
-          `Session created! ID: ${sessionData.id}, Code: ${sessionData.code}`,
+          `To connect another client (like test_websocket.py), use Session ID: ${sessionData.id}`,
         );
+        logMessage("------------------------------------------");
 
         logMessage("2. Joining participants...");
         const numParticipants = parseInt(numParticipantsInput.value, 10);
@@ -245,7 +264,7 @@
           }
 
           const pData = await joinRes.json();
-          const participantId = pData.participant_id; // <-- Capture the ID here
+          const participantId = pData.participant_id;
           participants[participantId] = { ...pData, color: "#888" };
           logMessage(
             `   ${pData.participant_name} joined with ID ${participantId}.`,
@@ -256,7 +275,6 @@
             `${WS_BASE_URL}/ws/${sessionData.id}/${participantId}`,
           );
           ws.onmessage = handleWebSocketMessage;
-
           ws.onopen = () =>
             logMessage(`   WebSocket connected for ${participantId}.`);
           ws.onerror = (err) =>

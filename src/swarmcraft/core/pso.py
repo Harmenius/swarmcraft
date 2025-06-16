@@ -38,6 +38,7 @@ class PSO(SwarmOptimizer):
         social_coefficient: float = 2.0,
         # Human interaction parameters
         exploration_probability: float = 0.1,
+        min_exploration_probability: Optional[float] = None,
         min_inertia: float = 0.4,
         max_velocity_factor: float = 0.2,
         random_seed: Optional[int] = None,
@@ -55,6 +56,7 @@ class PSO(SwarmOptimizer):
             cognitive_coefficient: Personal best influence (c1)
             social_coefficient: Global best influence (c2)
             exploration_probability: Chance a particle becomes explorer each round
+            min_exploration_probability: The minimum exploration probability to decay to. If None, it remains constant.
             min_inertia: Minimum inertia weight for adaptive decay
             max_velocity_factor: Maximum velocity as fraction of search space
             random_seed: Random seed for reproducibility
@@ -75,12 +77,41 @@ class PSO(SwarmOptimizer):
         self.social_coefficient = social_coefficient
 
         # Human interaction parameters
-        self.exploration_probability = exploration_probability
+        self.initial_exploration_probability = exploration_probability
+        self.current_exploration_probability = exploration_probability
+        self.min_exploration_probability = min_exploration_probability
         self.min_inertia = min_inertia
 
         # Calculate maximum velocity based on search space
         search_range = self.bounds[:, 1] - self.bounds[:, 0]
         self.max_velocity = max_velocity_factor * search_range
+
+    def _update_adaptive_parameters(self) -> None:
+        """Update adaptive parameters using linear decay based on progress."""
+        # Avoid division by zero if max_iterations is 0 or 1
+        if self.max_iterations <= 1:
+            return
+
+        progress = self.swarm_state.iteration / self.max_iterations
+
+        # 1. Update inertia weight
+        self.inertia_weight = (
+            self.initial_inertia - (self.initial_inertia - self.min_inertia) * progress
+        )
+
+        # 2. Update exploration probability (if decay is configured)
+        if (
+            self.min_exploration_probability is not None
+            and self.min_exploration_probability < self.initial_exploration_probability
+        ):
+            self.current_exploration_probability = (
+                self.initial_exploration_probability
+                - (
+                    self.initial_exploration_probability
+                    - self.min_exploration_probability
+                )
+                * progress
+            )
 
     def _update_particles(self) -> None:
         """
@@ -91,8 +122,8 @@ class PSO(SwarmOptimizer):
         2. Random exploration assignments for some particles
         3. Velocity clamping to prevent runaway behavior
         """
-        # Update adaptive inertia weight
-        self._update_inertia_weight()
+        # Update adaptive parameters
+        self._update_adaptive_parameters()
 
         # Assign exploration roles randomly
         self._assign_exploration_roles()
@@ -107,13 +138,6 @@ class PSO(SwarmOptimizer):
             # Clamp velocity and ensure bounds
             self._clamp_velocity(particle)
 
-    def _update_inertia_weight(self) -> None:
-        """Update inertia weight using linear decay."""
-        progress = self.swarm_state.iteration / self.max_iterations
-        self.inertia_weight = (
-            self.initial_inertia - (self.initial_inertia - self.min_inertia) * progress
-        )
-
     def _assign_exploration_roles(self) -> None:
         """
         Randomly assign exploration roles to particles.
@@ -122,7 +146,7 @@ class PSO(SwarmOptimizer):
         break from the swarm to explore unknown regions.
         """
         for particle in self.swarm_state.particles:
-            if random.random() < self.exploration_probability:
+            if random.random() < self.current_exploration_probability:
                 particle.state = ParticleState.EXPLORING
             else:
                 particle.state = ParticleState.EXPLOITING
@@ -223,6 +247,7 @@ class PSO(SwarmOptimizer):
 
         pso_stats = {
             "current_inertia": self.inertia_weight,
+            "current_exploration_probability": self.current_exploration_probability,
             "velocity_stats": {
                 "mean_speed": float(np.mean(velocities)),
                 "max_speed": float(np.max(velocities)),

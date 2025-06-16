@@ -27,6 +27,7 @@ class SessionConfig(BaseModel):
     grid_size: int = 25
     max_participants: int = 30
     exploration_probability: float = 0.15
+    min_exploration_probability: Optional[float] = None
 
 
 class GameSession(BaseModel):

@@ -286,6 +286,7 @@ class ConnectionManager:
                 loss_function=discrete_landscape_func,
                 population_size=len(session.participants),
                 exploration_probability=session.config.exploration_probability,
+                min_exploration_probability=session.config.min_exploration_probability,
             )
 
         swarm = self.active_swarms[session_id]

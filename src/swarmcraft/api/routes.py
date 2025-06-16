@@ -177,6 +177,8 @@ async def make_move(
         bounds=landscape.metadata.recommended_bounds,
         loss_function=landscape.evaluate,
         population_size=len(session.participants),
+        exploration_probability=session.config.exploration_probability,
+        min_exploration_probability=session.config.min_exploration_probability,
     )
     # This is the crucial step: restoring the full state of the swarm.
     pso.swarm_state = swarm_state
@@ -278,6 +280,8 @@ async def trigger_swarm_step(
         bounds=landscape.metadata.recommended_bounds,
         loss_function=landscape.evaluate,
         population_size=len(session.participants),
+        exploration_probability=session.config.exploration_probability,
+        min_exploration_probability=session.config.min_exploration_probability,
     )
     pso.swarm_state = swarm_state
 
@@ -346,6 +350,8 @@ async def start_session(
         bounds=landscape.metadata.recommended_bounds,
         loss_function=landscape.evaluate,
         population_size=len(session.participants),
+        exploration_probability=session.config.exploration_probability,
+        min_exploration_probability=session.config.min_exploration_probability,
     )
 
     # 3. SYNC the game state with the newly created swarm state.
