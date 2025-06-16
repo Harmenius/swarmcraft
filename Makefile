@@ -11,6 +11,7 @@ help:
 	@echo "  down             - Stop and remove all services."
 	@echo "  build            - Rebuild the Docker images."
 	@echo "  redis            - Start only the Redis container in the background."
+	@echo "  websocket        - Run the WebSocket test script in the API container."
 	@echo "  test             - Run fast, local unit tests (no Redis required)."
 	@echo "  test-integration - Run integration tests (requires Redis)."
 	@echo "  test-all         - Run all tests (local and integration)."
@@ -34,6 +35,9 @@ build:
 
 redis:
 	docker compose up redis -d
+
+websocket:
+	docker compose exec api uv run python demo/test_websocket.py
 
 # Testing
 test:
