@@ -146,6 +146,38 @@ class OptimizationLandscape(ABC):
             return "This area has high cost - consider exploring elsewhere."
 
 
+class QuadraticLandscape(OptimizationLandscape):
+    """
+    Simple quadratic function - a smooth bowl perfect for testing convergence.
+    """
+
+    def __init__(self, dimensions: int = 2):
+        self.dimensions = dimensions
+        super().__init__()
+
+    def _create_metadata(self) -> LandscapeMetadata:
+        bounds = [(-10.0, 10.0)] * self.dimensions
+        return LandscapeMetadata(
+            name="Quadratic Bowl",
+            description="A simple, smooth, convex function with a single global minimum at the origin.",
+            landscape_type=LandscapeType.MATHEMATICAL,
+            dimensions=self.dimensions,
+            recommended_bounds=bounds,
+            global_minimum=[0.0] * self.dimensions,
+            global_minimum_value=0.0,
+            local_minima_count=0,
+            difficulty_level=1,
+            story_context="This is a simple test landscape. Find the bottom of the bowl!",
+            axis_labels=["X", "Y"] if self.dimensions == 2 else None,
+        )
+
+    def evaluate(self, position: np.ndarray | list[float]) -> float:
+        """Evaluates f(x) = Σ(x_i^2)"""
+        if isinstance(position, list):
+            position = np.array(position)
+        return np.sum(position**2)
+
+
 class RastriginLandscape(OptimizationLandscape):
     """
     Rastrigin function - classic multimodal optimization problem.
