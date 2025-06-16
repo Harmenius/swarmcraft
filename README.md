@@ -1,165 +1,106 @@
 # SwarmCraft
-*Interactive Swarm Intelligence for Experiential Learning*
+Interactive Swarm Intelligence for Experiential Learning
 
-## Project Overview
-
+# Project Overview
 SwarmCraft is an innovative educational platform that makes swarm intelligence viscerally understandable through embodied, interactive experiences. Participants become "particles" in optimization algorithms, experiencing firsthand how collective intelligence emerges from individual actions and discovering the crucial balance between exploration and exploitation.
 
-### Core Philosophy
+# Core Philosophy
 
-- **Experiential Learning**: Mathematical concepts become visceral through physical participation.
-- **Multilayered Teaching**: Multiple levels of meaning accessible to different audiences (13-year-olds to policymakers).
-- **Human-AI Collaboration**: Demonstrates emergent intelligence through human-AI partnership.
-- **Embodied Understanding**: Participants physically feel algorithmic forces and optimization landscapes.
+1. Experiential Learning: Mathematical concepts become visceral through physical participation.
+1. Multilayered Teaching: Multiple levels of meaning accessible to different audiences (13-year-olds to policymakers).
+1. Human-AI Collaboration: Demonstrates emergent intelligence through human-AI partnership.
+1. Embodied Understanding: Participants physically feel algorithmic forces and optimization landscapes.
 
-### Target Audiences
+# Target Audiences
+- High School Students (13+): Understanding collective behavior and emergence.
+- Graduate Students: Applied data science and optimization concepts.
+- Policymakers: Coordination problems, local vs. global optima, and systemic thinking.
+- Researchers: Human-AI collaboration and swarm intelligence applications.
 
-- **High School Students (13+)**: Understanding collective behavior and emergence.
-- **Graduate Students**: Applied data science and optimization concepts.
-- **Policymakers**: Coordination problems, local vs. global optima, and systemic thinking.
-- **Researchers**: Human-AI collaboration and swarm intelligence applications.
+# System Architecture
+## Technology Stack
 
-## System Architecture
+Backend:
+- FastAPI: Modern async web framework with automatic API documentation.
+- Redis: Real-time session state management and participant coordination.
+- Pydantic V2: Robust data validation and serialization.
+- WebSockets: Real-time bidirectional communication for live updates.
+- Loguru: Clear, timestamped, and colorized logging for easy debugging.
 
-### Technology Stack
+## Core Algorithms:
 
-**Backend:**
-- **FastAPI**: Modern async web framework with automatic API documentation.
-- **Redis**: Real-time session state management and participant coordination.
-- **Pydantic V2**: Robust data validation and serialization.
-- **WebSockets**: Real-time bidirectional communication for live updates.
+- PSO (Particle Swarm Optimization): Primary swarm intelligence algorithm.
+- Adaptive Parameters: Dynamic exploration/exploitation balance with annealing.
+- Grid Discretization: Continuous optimization mapped to discrete human interaction.
 
-**Core Algorithms:**
-- **PSO (Particle Swarm Optimization)**: Primary swarm intelligence algorithm.
-- **Adaptive Parameters**: Dynamic exploration/exploitation balance.
-- **Grid Discretization**: Continuous optimization mapped to discrete human interaction.
+# Visualization & Testing:
+- Plotly: Interactive 3D/2D landscape visualization for analysis.
+- Jupyter Notebooks: Rapid prototyping and algorithm tuning suite.
+- HTML/JS Test Client: A minimal client for end-to-end testing of the full application loop.
 
-**Visualization:**
-- **Plotly**: Interactive 3D/2D landscape visualization with grid overlays.
-- **Real-time Feedback**: Color/audio generation based on fitness values.
-- **Dashboard Analytics**: Comprehensive landscape analysis and debugging tools.
+Implementation Roadmap
+✅ Phase 1: Core Algorithm Framework (COMPLETED)
+The underlying swarm intelligence engine and visualization tools are complete and tested.
+✅ Phase 2: Backend API Infrastructure (COMPLETED)
+The FastAPI application is fully functional with robust, stateful session management using Redis and admin-protected endpoints.
+✅ Phase 3: End-to-End Testing & Validation (COMPLETED)
+The system has been validated from end to end using a minimal HTML/JS test client to verify the full application loop.
+✅ Phase 4: Algorithm Tuning & Refinement (COMPLETED)
 
-**Frontend (Planned):**
-- **Svelte**: Reactive mobile-first interface.
-- **Touch Grid Interface**: Tap-to-move with sub-grid precision.
-- **Real-time Audio**: Harmonic soundscapes based on collective fitness.
+The PSO algorithm has been refined with a new test landscape (Quadratic), exploration annealing for smoother convergence, and enhanced debugging via improved logging and a more flexible test client. All core logic has been unit tested.
 
-## Current Implementation Status
+🚧 Phase 5: Mobile Frontend Development (Svelte) (IN PROGRESS)
 
-### ✅ **Phase 1: Core Algorithm Framework** (COMPLETED)
+With a stable and tested backend, the next major step is to build the mobile-first frontend experience for participants.
 
-The underlying swarm intelligence engine and visualization tools are complete and tested. This includes the `SwarmOptimizer` base class, a full-featured `PSO` implementation, and multiple `OptimizationLandscape` options like Rastrigin and the Ecological Challenge.
+- [ ] Setup SvelteKit Project: Initialize the frontend project with TypeScript and TailwindCSS.
+- [ ] Session Joining Flow: Create UI for joining a session via a code.
+- [ ] Grid Interface: Develop the primary 25x25 grid with touch interaction.
+- [ ] WebSocket Integration: Connect the frontend to the backend for live updates.
+- [ ] Real-time Visuals: Implement real-time updates for particle positions and card colors based on WebSocket messages.
+- [ ] Participant View: Create the individual participant view that will be the core of the mobile experience.
 
-### ✅ **Phase 2: Backend API Infrastructure** (COMPLETED)
+Testing Strategy: Develop a multi-participant testing view (see notes below) to simulate a full session on a single screen during development.
 
-The FastAPI application is fully functional. This includes robust, stateful session management using Redis, admin-protected endpoints for controlling the simulation (create, start, step, list, close), and real-time WebSocket communication for pushing updates to clients.
+🔬 Phase 6: Advanced Algorithms & Social Dynamics (PLANNED)
 
-### ✅ **Phase 3: End-to-End Testing & Validation** (COMPLETED)
+This phase focuses on enriching the experience by introducing more complex and socially interesting algorithms.
 
-The system has been validated from end to end. The `test_core.py` and `test_api.py` suites ensure backend correctness. A minimal HTML/JS test client has been used to verify the full application loop, from session creation to real-time participant updates on the grid.
+- [ ] Implement New Algorithms:
+- [ ] Artificial Bee Colony (ABC): Introduce roles like "employed," "onlooker," and "scout" bees.
+- [ ] Grey Wolf Optimizer (GWO): Implement a social hierarchy with "alpha," "beta," and "omega" wolves.
+- [ ] Broadcast Participant Roles: Update the WebSocket communication protocol to broadcast the specific role of each participant (e.g., role: "scout" or role: "alpha") so the frontend can display it.
+- [ ] Role-Based UI: Modify the frontend to visually represent these different roles, enhancing the social learning aspect.
 
-## Implementation Roadmap
+📋 Phase 7: Enhanced User Experience (PLANNED)
 
-### 🔬 **Phase 4: Algorithm Tuning & Refinement** (IN PROGRESS)
+Advanced Feedback Systems:
 
-Based on testing with the minimal client, the next step is to fine-tune the algorithm's behavior to create a better user experience before building the full frontend.
-- [ ] **Create a smooth loss surface**: Implement a simple, convex loss function (e.g., a quadratic bowl) to test basic convergence without the complexity of local minima.
-- [ ] **Tune for Fast Convergence**: Find a mix of PSO parameters and landscape settings that allow the swarm to reliably converge in ~5-10 steps. This is ideal for quick testing and live demonstrations.
-- [ ] **Develop a Jupyter Notebook testing suite**: Use the existing notebook to interactively tweak landscape and PSO parameters and visualize the results immediately to find the optimal settings.
-- [ ] **Validate in a Browser**: Port the "fast convergence" settings back to the `index.html` test client to ensure the experience is smooth and visually understandable.
-
-### 🚧 **Phase 5: Frontend Development** (PLANNED)
-
-**Svelte Mobile Interface:**
-- [ ] Responsive 25x25 grid interface with touch interaction.
-- [ ] Tap-to-zoom sub-grid selection for precise positioning.
-- [ ] Real-time visual feedback (background colors, particle indicators).
-- [ ] WebSocket integration for live session participation.
-- [ ] Session joining flow with QR code scanning or manual entry.
-- [ ] Audio feedback system with harmonic frequency generation.
-
-**User Experience:**
-- [ ] Onboarding flow explaining swarm intelligence concepts.
-- [ ] Real-time participant list with creative names.
-- [ ] Fitness history visualization and personal progress tracking.
-- [ ] Session results summary with collective optimization insights.
-
-**Admin Interface:**
-- [ ] Session creation wizard with landscape configuration.
-- [ ] Real-time session monitoring dashboard with participant positions.
-- [ ] Swarm statistics visualization and optimization progress tracking.
-- [ ] Session control panel (start/pause/step/reset).
-
-### 📋 **Phase 6: Enhanced User Experience** (PLANNED)
-
-**Advanced Feedback Systems:**
+- [ ] Advanced audio synthesis with harmonic progression based on swarm fitness.
 - [ ] Haptic feedback integration for mobile devices.
-- [ ] Advanced audio synthesis with harmonic progression.
 - [ ] Visual effects and particle animations.
 - [ ] Collaborative achievement system and progress indicators.
 
-**Educational Content:**
+Educational Content & Admin Tools:
+
 - [ ] Interactive tutorials explaining swarm intelligence principles.
-- [ ] Post-session analysis and reflection tools.
-- [ ] Comparative landscape exploration (Rastrigin vs. Ecological).
-- [ ] Educator dashboard with learning outcome tracking.
+- [ ] Post-session analysis and reflection tools for participants.
+- [ ] An admin dashboard for real-time session monitoring and control.
 
-**Session Management:**
-- [ ] Session templates for different educational contexts.
-- [ ] Participant role assignments (explorers, followers, leaders).
-- [ ] Time-based challenges and optimization competitions.
-- [ ] Session recording and playback for analysis.
-
-### 🔬 **Phase 7: Advanced Algorithms & Landscapes** (PLANNED)
-
-**Additional Optimization Algorithms:**
-- [ ] Artificial Bee Colony (ABC) implementation.
-- [ ] Genetic Algorithm (GA) for comparative experiences.
-- [ ] Hybrid algorithms combining multiple approaches.
-- [ ] Custom algorithm designer for educators.
-
-**Landscape Expansion:**
-- [ ] **Social Coordination Landscapes**: Prisoner's dilemma, cooperation challenges.
-- [ ] **Economic Landscapes**: Resource allocation, market dynamics.
-- [ ] **Psychological Landscapes**: Personal growth, decision-making, human-AI collaboration.
-- [ ] User-defined landscape creator with visual editor.
-
-**Advanced Features:**
-- [ ] Multi-objective optimization with Pareto frontiers.
-- [ ] Dynamic landscapes that change during optimization.
-- [ ] Competitive swarms with different strategies.
-- [ ] AI-guided exploration suggestions and collaborative optimization.
-
-### 🤖 **Phase 8: Human-AI Collaboration Suite** (VISION)
-
-**Existential Meaning Navigation:**
+🤖 Phase 8: Human-AI Collaboration Suite (VISION)
+Existential Meaning Navigation:
 - [ ] Personal growth optimization with AI guidance.
-- [ ] Life decision support through landscape exploration.
 - [ ] Meaning-making through collaborative intelligence.
 - [ ] Therapeutic applications with professional oversight.
 
-**Advanced AI Integration:**
-- [ ] GPT-based session facilitation and explanation.
-- [ ] Personalized learning path optimization.
-- [ ] Real-time educational content generation.
-- [ ] Adaptive difficulty and engagement optimization.
-
-**Research Platform:**
-- [ ] Data collection for swarm intelligence research.
-- [ ] Human-AI collaboration effectiveness metrics.
-- [ ] Educational outcome measurement and optimization.
-- [ ] Publication-ready research data export.
-
-## Getting Started
-
-### Prerequisites
-
+# Getting Started
+## Prerequisites
 - Python 3.12
 - uv package manager
 - Redis (Docker or local installation)
 - OpenSSL (for admin key generation)
 
-### Quick Setup
+Quick Setup
 
 ```bash
 # Clone and setup project
@@ -172,8 +113,7 @@ echo "SWARM_API_KEY=$(openssl rand -hex 32)" > .env
 echo "REDIS_URL=redis://localhost:6379" >> .env
 
 # Start services
-docker compose up redis -d
-uv run uvicorn src.swarmcraft.main:app --reload
+docker compose up --build
 
 # Test the system
 source .env
@@ -181,7 +121,14 @@ curl http://localhost:8000/health
 ```
 
 Development Workflow
+
 ```bash
+# Start services
+docker compose up
+
+# Make changes to Python files. The server will auto-reload.
+# No need to rebuild unless changing dependencies (pyproject.toml).
+
 # Run tests
 uv run pytest tests/ -v
 
