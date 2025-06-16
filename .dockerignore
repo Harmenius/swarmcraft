@@ -1,23 +1,31 @@
-# Docker-specific
-.dockerignore
-Dockerfile
-docker-compose.yml
+# .dockerignore
 
-# Git
-.git
-.gitignore
+# Ignore the virtual environment. This prevents the local venv from
+# overwriting the venv inside the container, which is a common
+# source of conflicts.
+.venv/
 
-# Python virtual environment
-.venv
+# Ignore Python bytecode and cache files
 __pycache__/
-*.py[oc]
-*.egg-info
+*.pyc
+*.pyo
+*.pyd
 
-# Local secrets and config
-.env
-
-# IDE and OS files
-.idea/
+# Ignore IDE and editor specific files
 .vscode/
-*.DS_Store
+.idea/
+
+# Ignore local development files and logs
+.env
+logs/
+*.log
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore test reports and coverage data
+.coverage
+.pytest_cache/
+htmlcov/
 

@@ -9,6 +9,7 @@ from swarmcraft.database.redis_client import redis_client
 
 # Use a consistent test key for all tests
 TEST_ADMIN_KEY = "test_admin_key_for_ci_12345"
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="session")

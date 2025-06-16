@@ -49,9 +49,11 @@ python_functions = ["test_*"]
 addopts = [
     "-ra",  # Show summary of all results
 	"-v",  # Verbose output
+	"--cov=src/swarmcraft",
     "--strict-markers",  # Strict marker usage
     "--strict-config",   # Strict config
     "--disable-warnings",  # Disable warnings for cleaner output
+	"-m", "not integration",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
