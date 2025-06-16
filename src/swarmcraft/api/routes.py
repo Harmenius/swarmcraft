@@ -468,3 +468,52 @@ async def close_session(
         del websocket_manager.active_swarms[session_id]
 
     return {"message": f"Session {session_id} has been closed and all data deleted."}
+
+
+@router.post("/admin/session/{session_id}/reset")
+async def reset_session(
+    session_id: str, redis_conn=Depends(get_redis), _: bool = Depends(verify_admin_key)
+):
+    """
+    Resets a session to its pre-start state while keeping all participants.
+    It resets the iteration count, clears swarm state, and sets the status to WAITING.
+    """
+    session_data = await get_json(f"session:{session_id}", redis_conn)
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    session = GameSession(**session_data)
+
+    # Reset core attributes
+    session.status = SessionStatus.WAITING
+    session.swarm_iteration = 0
+    session.started_at = None
+
+    # Clear position and fitness data for each participant
+    for p in session.participants:
+        p.position = None
+        p.fitness = None
+        p.velocity_magnitude = None
+
+    # Save the reset session state
+    await set_json(
+        f"session:{session_id}",
+        session.model_dump(mode="json"),
+        redis_conn,
+        expire=86400,
+    )
+
+    # Delete the persistent swarm state from Redis
+    await redis_conn.delete(f"swarm_state:{session_id}")
+
+    # Notify all clients that the session has been reset
+    await websocket_manager.broadcast_to_session(
+        {
+            "type": "session_reset",
+            "message": "The session has been reset by the admin.",
+            "session": session.model_dump(mode="json"),
+        },
+        session_id,
+    )
+
+    return {"message": f"Session {session_id} has been reset."}
