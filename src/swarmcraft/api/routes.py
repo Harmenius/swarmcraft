@@ -17,9 +17,10 @@ from swarmcraft.utils.name_generator import (
     generate_session_code,
 )
 from swarmcraft.core.loss_functions import create_landscape
-from swarmcraft.core.swarm_base import SwarmState
+from swarmcraft.core.swarm_base import SwarmState, Particle
 from swarmcraft.core.pso import PSO
 from swarmcraft.api.websocket import websocket_manager
+from loguru import logger
 
 router = APIRouter()
 
@@ -72,6 +73,7 @@ async def create_session(
 async def join_session(session_code: str, redis_conn=Depends(get_redis)):
     """Join a session using session code"""
     # Get session ID from code
+    logger.info(f"session status requested for {session_code}")
     session_id = await redis_conn.get(f"session_code:{session_code}")
     if not session_id:
         raise HTTPException(status_code=404, detail="Invalid session code")
@@ -103,6 +105,64 @@ async def join_session(session_code: str, redis_conn=Depends(get_redis)):
     # Add to session
     session.participants.append(participant)
 
+    # ===== NEW: Handle active sessions =====
+    if session.status == SessionStatus.ACTIVE:
+        # Load existing swarm state
+        swarm_state_data = await get_json(f"swarm_state:{session_id}", redis_conn)
+        if swarm_state_data:
+            # Create PSO instance with updated participant count
+            landscape = create_landscape(
+                session.config.landscape_type, **session.config.landscape_params
+            )
+            pso = PSO(
+                dimensions=2,
+                bounds=landscape.metadata.recommended_bounds,
+                loss_function=landscape.evaluate,
+                population_size=len(session.participants),  # Updated count
+                max_iterations=session.config.max_iterations,
+                exploration_probability=session.config.exploration_probability,
+                min_exploration_probability=session.config.min_exploration_probability,
+            )
+
+            # Restore existing swarm state
+            pso.swarm_state = SwarmState(**swarm_state_data)
+
+            # Add a new particle for the new participant
+            new_particle_id = f"particle_{len(pso.swarm_state.particles)}"
+            new_position = pso._generate_random_position()
+            new_fitness = landscape.evaluate(new_position)
+
+            new_particle = Particle(
+                id=new_particle_id,
+                position=new_position.tolist(),
+                velocity=[0.0] * pso.dimensions,
+                fitness=new_fitness,
+                personal_best_position=new_position.tolist(),
+                personal_best_fitness=new_fitness,
+            )
+
+            # Add to swarm state
+            pso.swarm_state.particles.append(new_particle)
+
+            # Update global best if this new particle is better
+            if new_fitness < pso.swarm_state.global_best_fitness:
+                pso.swarm_state.update_global_best(
+                    new_position, new_fitness, new_particle_id
+                )
+
+            # Sync all participants with swarm (includes new participant)
+            session.participants = pso.sync_participants_from_swarm(
+                participants=session.participants, grid_size=session.config.grid_size
+            )
+
+            # Save updated swarm state
+            await set_json(
+                f"swarm_state:{session_id}",
+                pso.swarm_state.model_dump(mode="json"),
+                redis_conn,
+                expire=86400,
+            )
+
     # Save updated session
     await set_json(
         f"session:{session_id}",
@@ -110,6 +170,40 @@ async def join_session(session_code: str, redis_conn=Depends(get_redis)):
         redis_conn,
         expire=86400,
     )
+
+    # ===== NEW: Broadcast participant joined =====
+    # Build participants with colors for broadcasting
+    participants_with_color = []
+    if session.status == SessionStatus.ACTIVE:
+        landscape = create_landscape(
+            session.config.landscape_type, **session.config.landscape_params
+        )
+        for p in session.participants:
+            p_dict = p.model_dump(mode="json")
+            p_dict["color"] = (
+                landscape.get_fitness_color(p.fitness, p.velocity_magnitude)
+                if p.fitness is not None
+                else "#888888"
+            )
+            participants_with_color.append(p_dict)
+    else:
+        participants_with_color = [
+            p.model_dump(mode="json") for p in session.participants
+        ]
+
+    await websocket_manager.broadcast_to_session(
+        {
+            "type": "participant_joined",
+            "participant_id": participant_id,
+            "participant_name": participant.name,
+            "participants": participants_with_color,  # Include full updated list
+            "session": session.model_dump(mode="json"),
+            "timestamp": datetime.now().isoformat(),
+        },
+        session_id,
+    )
+    logger.info(f"Session status {session.status}")
+    logger.info(f"Participant count: {len(session.participants)}")
 
     return {
         "session_id": session_id,
@@ -517,3 +611,74 @@ async def reset_session(
     )
 
     return {"message": f"Session {session_id} has been reset."}
+
+
+@router.post("/admin/session/{session_id}/remove-participant")
+async def remove_participant(
+    session_id: str,
+    participant_data: dict,  # Should contain participant_id
+    redis_conn=Depends(get_redis),
+    _: bool = Depends(verify_admin_key),
+):
+    """Remove a participant from the session (admin only)"""
+    participant_id = participant_data.get("participant_id")
+    if not participant_id:
+        raise HTTPException(status_code=400, detail="participant_id required")
+
+    # Get session data
+    session_data = await get_json(f"session:{session_id}", redis_conn)
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session = GameSession(**session_data)
+
+    # Remove participant from the list
+    session.participants = [p for p in session.participants if p.id != participant_id]
+
+    # Save updated session
+    await set_json(
+        f"session:{session_id}",
+        session.model_dump(mode="json"),
+        redis_conn,
+        expire=86400,
+    )
+
+    # Notify remaining participants
+    await websocket_manager.broadcast_to_session(
+        {
+            "type": "participant_removed",
+            "participant_id": participant_id,
+            "message": f"Participant {participant_id} has been removed",
+            "participants": [p.model_dump(mode="json") for p in session.participants],
+        },
+        session_id,
+    )
+
+    return {"message": f"Participant {participant_id} removed successfully"}
+
+
+@router.post("/admin/session/{session_id}/reveal")
+async def trigger_reveal(
+    session_id: str, redis_conn=Depends(get_redis), _: bool = Depends(verify_admin_key)
+):
+    """
+    Triggers a reveal phase, showing participants their fitness scores
+    """
+    session_data = await get_json(f"session:{session_id}", redis_conn)
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session = GameSession(**session_data)
+
+    if session.status != SessionStatus.ACTIVE:
+        return {"message": "Reveal skipped: session is not active."}
+
+    # Broadcast reveal message to all participants
+    reveal_message = {
+        "type": "reveal_fitness",
+        "message": "Revealing your fitness scores!",
+        "timestamp": datetime.now().isoformat(),
+    }
+    await websocket_manager.broadcast_to_session(reveal_message, session_id)
+
+    return {"message": "Fitness reveal triggered successfully."}
