@@ -50,6 +50,7 @@ async def test_health_check(async_client: AsyncClient):
     assert response.json()["status"] == "healthy"
 
 
+@pytest.mark.integration
 @pytest.mark.anyio
 class TestSessionLifecycle:
     """
