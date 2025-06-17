@@ -1,6 +1,7 @@
 import random
 
 ADJECTIVES = [
+    "magic",
     "vibrant",
     "funky",
     "cosmic",
@@ -25,7 +26,6 @@ ADJECTIVES = [
     "neon",
     "turbo",
     "super",
-    "mega",
     "ultra",
     "crystal",
     "golden",
@@ -35,6 +35,10 @@ ADJECTIVES = [
     "emerald",
     "violet",
     "amber",
+    "hyper",
+    "agile",
+    "chaotic",
+    "magik",
 ]
 
 ANIMALS = [
@@ -72,6 +76,11 @@ ANIMALS = [
     "butterfly",
     "hummingbird",
     "flamingo",
+    "crow",
+    "mycelium",
+    "firefly",
+    "pterodactyl",
+    "ant",
 ]
 
 
