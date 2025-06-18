@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 
 from swarmcraft.api.websocket import ConnectionManager, handle_websocket_message
-from swarmcraft.models.session import GameSession, SessionConfig
+from swarmcraft.models.session import GameSession, SessionConfig, AlgorithmType
 
 # Use anyio for async pytest fixtures
 pytestmark = pytest.mark.anyio
@@ -28,12 +28,38 @@ def mock_websocket():
 
 
 @pytest.fixture
-def test_session_data():
-    """Provides a sample session dictionary, as it would be stored in Redis."""
-    config = SessionConfig(landscape_type="rastrigin", grid_size=25)
+def test_session_data_pso():
+    """Provides a sample PSO session dictionary, as it would be stored in Redis."""
+    config = SessionConfig(
+        landscape_type="rastrigin",
+        grid_size=25,
+        algorithm_type=AlgorithmType.PSO,
+        exploration_probability=0.3,
+    )
     session = GameSession(
-        id="test_session_1",
-        code="ABCDEF",
+        id="test_session_pso",
+        code="PSOSESSION",
+        admin_id="admin",
+        config=config,
+        participants=[],
+        created_at=datetime.now(),
+    )
+    return session.model_dump(mode="json")
+
+
+@pytest.fixture
+def test_session_data_abc():
+    """Provides a sample ABC session dictionary, as it would be stored in Redis."""
+    config = SessionConfig(
+        landscape_type="quadratic",
+        grid_size=25,
+        algorithm_type=AlgorithmType.ABC,
+        abc_limit=5,
+        abc_employed_ratio=0.6,
+    )
+    session = GameSession(
+        id="test_session_abc",
+        code="ABCSESSION",
         admin_id="admin",
         config=config,
         participants=[],
@@ -111,23 +137,22 @@ class TestConnectionManager:
         ws1.send_text.assert_not_awaited()
         ws2.send_text.assert_awaited_once_with(json.dumps(message))
 
-    # Patch the get_redis function at the location where it is imported and used.
     @patch("swarmcraft.api.websocket.get_redis")
     @patch("swarmcraft.api.websocket.set_json")
     @patch("swarmcraft.api.websocket.get_json")
-    async def test_handle_position_update(
+    async def test_handle_position_update_pso(
         self,
         mock_get_json: AsyncMock,
         mock_set_json: AsyncMock,
         mock_get_redis: AsyncMock,
         manager: ConnectionManager,
-        test_session_data,
+        test_session_data_pso,
     ):
-        """Test the logic for a participant updating their position."""
-        session_id = "test_session_1"
+        """Test position update with PSO session."""
+        session_id = "test_session_pso"
         p_id = "p_test"
 
-        test_session_data["participants"].append(
+        test_session_data_pso["participants"].append(
             {
                 "id": p_id,
                 "name": "tester",
@@ -138,15 +163,61 @@ class TestConnectionManager:
                 "joined_at": datetime.now().isoformat(),
             }
         )
-        mock_get_json.return_value = test_session_data
+        mock_get_json.return_value = test_session_data_pso
 
-        # The mocked get_redis needs to return an awaitable mock
         mock_redis_conn = AsyncMock()
         mock_get_redis.return_value = mock_redis_conn
 
         manager.send_to_participant = AsyncMock()
         manager.broadcast_to_session = AsyncMock()
         new_position = [10, 12]
+
+        await manager.handle_position_update(session_id, p_id, new_position)
+
+        mock_get_json.assert_awaited_once_with(f"session:{session_id}", mock_redis_conn)
+        mock_set_json.assert_awaited_once()
+
+        saved_data = mock_set_json.await_args[0][1]
+        assert saved_data["participants"][0]["position"] == new_position
+        assert "fitness" in saved_data["participants"][0]
+
+        manager.send_to_participant.assert_awaited_once()
+        manager.broadcast_to_session.assert_awaited_once()
+
+    @patch("swarmcraft.api.websocket.get_redis")
+    @patch("swarmcraft.api.websocket.set_json")
+    @patch("swarmcraft.api.websocket.get_json")
+    async def test_handle_position_update_abc(
+        self,
+        mock_get_json: AsyncMock,
+        mock_set_json: AsyncMock,
+        mock_get_redis: AsyncMock,
+        manager: ConnectionManager,
+        test_session_data_abc,
+    ):
+        """Test position update with ABC session."""
+        session_id = "test_session_abc"
+        p_id = "p_test"
+
+        test_session_data_abc["participants"].append(
+            {
+                "id": p_id,
+                "name": "tester",
+                "position": None,
+                "fitness": None,
+                "velocity_magnitude": None,
+                "connected": True,
+                "joined_at": datetime.now().isoformat(),
+            }
+        )
+        mock_get_json.return_value = test_session_data_abc
+
+        mock_redis_conn = AsyncMock()
+        mock_get_redis.return_value = mock_redis_conn
+
+        manager.send_to_participant = AsyncMock()
+        manager.broadcast_to_session = AsyncMock()
+        new_position = [5, 8]
 
         await manager.handle_position_update(session_id, p_id, new_position)
 
@@ -192,3 +263,19 @@ class TestHandleWebsocketMessage:
         # The first argument is the dictionary itself, not a JSON string.
         sent_dict = mock_send_personal.await_args[0][0]
         assert sent_dict["type"] == "pong"
+
+    @patch("swarmcraft.api.websocket.websocket_manager.send_session_state")
+    async def test_handles_get_state_message(
+        self, mock_send_state: AsyncMock, mock_websocket: MagicMock
+    ):
+        """Verify that a 'get_state' message triggers session state send."""
+        state_message = json.dumps({"type": "get_state"})
+        mock_websocket.receive_text.side_effect = [
+            state_message,
+            asyncio.CancelledError,
+        ]
+
+        with pytest.raises(asyncio.CancelledError):
+            await handle_websocket_message(mock_websocket, "s1", "p1")
+
+        mock_send_state.assert_awaited_once_with("s1", "p1")
