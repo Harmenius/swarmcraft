@@ -224,6 +224,7 @@ class ConnectionManager:
         feedback_message = {
             "type": "position_feedback",
             "position": position,
+            "participant_id": participant_id,
             "fitness": fitness,
             "color": landscape.get_fitness_color(fitness),
             "frequency": landscape.get_fitness_audio_frequency(fitness),
